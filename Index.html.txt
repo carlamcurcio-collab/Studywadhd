@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Steady — ADHD Study Helper</title>
+<style>
+  :root{
+    --bg:#0f1220; --panel:#151936; --text:#e8ebff; --muted:#b7c0ff;
+    --accent:#7aa2ff; --accent2:#70e0a6; --danger:#ff7a7a; --ok:#8df29a;
+    --focus:#101430; --shadow:0 6px 18px rgba(0,0,0,.35);
+    --radius:14px; --pad:14px; --space:12px;
+    --font-size:16px;
+  }
+  @media (prefers-color-scheme: light) {
+    :root{ --bg:#f5f7ff; --panel:#ffffff; --text:#12141f; --muted:#4a5568; --accent:#2b5cff; --accent2:#0a9b63; --focus:#eef2ff; }
+  }
+  *{ box-sizing:border-box }
+  html,body{ height:100% }
+  body{
+    margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
+    background:var(--bg); color:var(--text); line-height:1.45; font-size:var(--font-size);
+  }
+  .app{ max-width:980px; margin:0 auto; padding:18px }
+  header{ display:flex; align-items:center; gap:12px; margin:8px 0 16px }
+  header h1{ font-size:20px; margin:0 }
+  nav{ margin-left:auto; display:flex; gap:8px; flex-wrap:wrap }
+  nav button{
+    background:transparent; border:1px solid var(--accent); color:var(--accent);
+    padding:8px 10px; border-radius:10px; cursor:pointer
+  }
+  nav button[aria-current="page"]{ background:var(--accent); color:white }
+  .panel{
+    background:var(--panel); border-radius:var(--radius); padding:var(--pad); box-shadow:var(--shadow);
+  }
+  .grid{ display:grid; gap:14px }
+  @media (min-width:840px){ .grid-2{ grid-template-columns: 1.2fr .8fr } }
+  label{ display:block; font-size:13px; color:var(--muted); margin-bottom:6px }
+  input[type="text"], textarea, select{
+    width:100%; padding:12px; border-radius:10px; border:1px solid #2b2f55;
+    background:#0e1230; color:var(--text);
+  }
+  textarea{ min-height:90px; resize:vertical }
+  .row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap }
+  .btn{
+    background:var(--accent); color:white; border:none; padding:12px 14px; border-radius:12px; cursor:pointer
+  }
+  .btn.secondary{ background:#2a2f59 }
+  .btn.ghost{ background:transparent; border:1px solid #2a2f59; color:var(--text) }
+  .btn.danger{ background:var(--danger) }
+  .list{ display:flex; flex-direction:column; gap:10px; margin:0; padding:0; list-style:none }
+  .item{ background:var(--focus); border:1px solid #252a55; padding:12px; border-radius:12px; display:flex; gap:10px; align-items:center; justify-content:space-between }
+  .small{ font-size:12px; color:var(--muted) }
+  .pill{ padding:4px 8px; border-radius:999px; background:#1b204d; color:#cbd4ff; font-size:12px }
+  .timer{
+    font-variant-numeric: tabular-nums; font-size:64px; text-align:center; margin:8px 0 2px;
+  }
+  .center{ text-align:center }
+  .success{ color:var(--ok) }
+  .warning{ color:var(--danger) }
+  .streak{ display:flex; gap:10px; flex-wrap:wrap }
+  .kbd{ border:1px solid #2a2f59; padding:2px 6px; border-radius:6px; font-size:12px; color:var(--muted) }
+  .hidden{ display:none !important }
+  .sr-only{ position:absolute; left:-9999px; width:1px; height:1px; overflow:hidden }
+</style>
+</head>
+<body>
+<a href="#main" class="sr-only">Skip to content</a>
+<div class="app" id="app">
+  <header>
+    <h1>Steady</h1>
+    <div class="pill" id="streakPill" title="Daily streak">Streak: 0</div>
+    <div class="pill" id="minutesPill" title="Focused minutes">0 min</div>
+    <nav>
+      <button data-view="focus" aria-current="page">Focus</button>
+      <button data-view="plan">Plan</button>
+      <button data-view="progress">Progress</button>
+      <button data-view="settings">Settings</button>
+    </nav>
+  </header>
+
+  <main id="main" class="grid grid-2">
+    <!-- LEFT COLUMN -->
+    <section id="view-focus" class="panel" aria-labelledby="focus-h">
+      <h2 id="focus-h" class="sr-only">Focus session</h2>
+      <div class="row">
+        <label class="sr-only" for="currentTask">Current task</label>
+        <select id="currentTask" aria-label="Current task"></select>
+        <button class="btn" id="pickTop">Pick Top Task</button>
+      </div>
+      <div role="status" aria-live="polite" class="center small" id="phaseLabel">Ready</div>
+      <div class="timer" id="clock" aria-live="polite">25:00</div>
+      <div class="center row" style="justify-content:center">
+        <button class="btn" id="startBtn">Start</button>
+        <button class="btn secondary" id="pauseBtn" disabled>Pause</button>
+        <button class="btn ghost" id="resetBtn" disabled>Reset</button>
+        <button class="btn ghost" id="extendBtn" disabled>+5 min</button>
+        <button class="btn ghost" id="completeBtn" disabled>Done</button>
+      </div>
+      <details style="margin-top:12px">
+        <summary>Distraction dump</summary>
+        <div class="row" style="margin-top:8px">
+          <input id="dumpInput" type="text" placeholder="Write it here instead of switching apps" />
+          <button class="btn secondary" id="dumpAdd">Add</button>
+        </div>
+        <ul class="list" id="dumpList" aria-label="Distraction list"></ul>
+      </details>
+      <p class="small center">Shortcuts: <span class="kbd">Space</span> start/pause, <span class="kbd">R</span> reset, <span class="kbd">D</span> done.</p>
+    </section>
+
+    <!-- RIGHT COLUMN -->
+    <section id="view-plan" class="panel hidden" aria-labelledby="plan-h">
+      <h2 id="plan-h">Plan</h2>
+      <div class="row">
+        <input id="newTaskText" type="text" placeholder="Quick capture: e.g., Read Chapter 3 pages 10–25" />
+        <select id="newTaskDur">
+          <option value="25">25m</option>
+          <option value="15">15m</option>
+          <option value="45">45m</option>
+          <option value="60">60m</option>
+        </select>
+        <button class="btn" id="addTask">Add</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn secondary" id="limitToThree">Send top 3 to Today</button>
+        <button class="btn ghost" id="clearDone">Clear done</button>
+      </div>
+      <h3 style="margin-top:12px">Today (max 3)</h3>
+      <ul class="list" id="todayList"></ul>
+      <h3>Backlog</h3>
+      <ul class="list" id="backlogList"></ul>
+    </section>
+
+    <section id="view-progress" class="panel hidden" aria-labelledby="prog-h">
+      <h2 id="prog-h">Progress</h2>
+      <div class="streak">
+        <div>Daily streak: <strong id="streakDays">0</strong></div>
+        <div>Total focused minutes: <strong id="totalMinutes">0</strong></div>
+        <div>Sessions: <strong id="sessionCount">0</strong></div>
+      </div>
+      <h3 style="margin-top:10px">Recent sessions</h3>
+      <ul class="list" id="sessionList"></ul>
+    </section>
+
+    <section id="view-settings" class="panel hidden" aria-labelledby="set-h">
+      <h2 id="set-h">Settings</h2>
+      <div class="grid">
+        <div>
+          <label for="durFocus">Focus minutes</label>
+          <input id="durFocus" type="number" min="5" max="120" value="25">
+        </div>
+        <div>
+          <label for="durBreak">Break minutes</label>
+          <input id="durBreak" type="number" min="3" max="30" value="5">
+        </div>
+        <div>
+          <label for="fontSize">Font size (px)</label>
+          <input id="fontSize" type="number" min="14" max="22" value="16">
+        </div>
+        <div>
+          <label for="soundToggle">Sound</label>
+          <select id="soundToggle">
+            <option value="off">Off</option>
+            <option value="on">On</option>
+          </select>
+        </div>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn" id="saveSettings">Save</button>
+        <button class="btn danger" id="resetAll">Factory reset</button>
+      </div>
+      <p class="small">Design choices: low-stimulus colors, big targets, limited options, one main action.</p>
+    </section>
+  </main>
+</div>
+
+<audio id="ding" preload="auto">
+  <source src="data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" type="audio/wav">
+</audio>
+
+<script>
+/* ---------- State ---------- */
+const S = {
+  tasks: [],
+  sessions: [],
+  settings: { focus:25, break:5, sound:false, fontSize:16 },
+  view: 'focus',
+  timer: { phase:'idle', remaining: 25*60, handle:null, startedAt:null, currentTaskId:null }
+};
+const el = id => document.getElementById(id);
+const $ = sel => document.querySelector(sel);
+const $$ = sel => Array.from(document.querySelectorAll(sel));
+const STORE = 'steady_v1';
+
+/* ---------- Storage ---------- */
+function load(){
+  try{ const raw = JSON.parse(localStorage.getItem(STORE) || '{}');
+    if(raw.tasks) S.tasks = raw.tasks;
+    if(raw.sessions) S.sessions = raw.sessions;
+    if(raw.settings) Object.assign(S.settings, raw.settings);
+  }catch(e){}
+}
+function save(){
+  localStorage.setItem(STORE, JSON.stringify({tasks:S.tasks, sessions:S.sessions, settings:S.settings}));
+}
+
+/* ---------- Utils ---------- */
+const uid = () => Math.random().toString(36).slice(2,9);
+const todayKey = () => new Date().toISOString().slice(0,10);
+function fmt(sec){
+  const m = Math.floor(sec/60).toString().padStart(2,'0');
+  const s = Math.floor(sec%60).toString().padStart(2,'0');
+  return `${m}:${s}`;
+}
+function nowMinutes(){ return Math.round(Date.now()/60000); }
+
+/* ---------- Render ---------- */
+function renderHeader(){
+  const mins = S.sessions.reduce((a,s)=>a+(s.minutes||0),0);
+  el('minutesPill').textContent = `${mins} min`;
+  el('streakPill').textContent = `Streak: ${streakCount()}`;
+}
+function renderNav(){
+  $$('nav button').forEach(b=>{
+    b.setAttribute('aria-current', b.dataset.view===S.view ? 'page' : 'false');
+  });
+  ['focus','plan','progress','settings'].forEach(v=>{
+    el(`view-${v}`).classList.toggle('hidden', v!==S.view);
+  });
+}
+function renderPlan(){
+  // Build lists
+  const today = S.tasks.filter(t=>t.today && !t.done);
+  const backlog = S.tasks.filter(t=>!t.today && !t.done);
+  const li = (t) => {
+    const li = document.createElement('li'); li.className='item';
+    li.innerHTML = `
+      <div>
+        <div>${t.text}</div>
+        <div class="small">${t.minutes||25} min • ${t.today?'Today':'Backlog'}</div>
+      </div>
+      <div class="row">
+        <button class="btn ghost move">${t.today?'Backlog':'Today'}</button>
+        <button class="btn ghost done">${t.done?'Undone':'Mark done'}</button>
+        <button class="btn ghost del">Delete</button>
+      </div>`;
+    li.querySelector('.move').onclick=()=>{
+      t.today=!t.today; save(); renderPlan(); renderFocusTaskSelect();
+    };
+    li.querySelector('.done').onclick=()=>{
+      t.done=!t.done; save(); renderPlan(); renderFocusTaskSelect();
+    };
+    li.querySelector('.del').onclick=()=>{
+      S.tasks = S.tasks.filter(x=>x.id!==t.id); save(); renderPlan(); renderFocusTaskSelect();
+    };
+    return li;
+  };
+  const tList = el('todayList'); tList.innerHTML=''; today.forEach(t=>tList.appendChild(li(t)));
+  const bList = el('backlogList'); bList.innerHTML=''; backlog.forEach(t=>bList.appendChild(li(t)));
+}
+function renderFocus(){
+  const f = S.timer;
+  el('clock').textContent = fmt(f.remaining);
+  el('phaseLabel').textContent = f.phase==='focus'?'Focusing': f.phase==='break'?'Break':'Ready';
+  // buttons
+  el('pauseBtn').disabled = !(f.phase==='focus' || f.phase==='break');
+  el('resetBtn').disabled = (f.phase==='idle');
+  el('extendBtn').disabled = !(f.phase==='focus');
+  el('completeBtn').disabled = !(f.phase==='idle' && S.timer.currentTaskId);
+  renderFocusTaskSelect();
+}
+function renderFocusTaskSelect(){
+  const select = el('currentTask');
+  const options = S.tasks.filter(t=>!t.done && (t.today || true));
+  select.innerHTML = '';
+  const placeholder = document.createElement('option');
+  placeholder.value=''; placeholder.textContent='Choose a task…'; select.appendChild(placeholder);
+  options.forEach(t=>{
+    const o=document.createElement('option'); o.value=t.id; o.textContent=t.text; select.appendChild(o);
+  });
+  if(S.timer.currentTaskId){ select.value=S.timer.currentTaskId; }
+}
+function renderProgress(){
+  el('streakDays').textContent = streakCount();
+  el('totalMinutes').textContent = S.sessions.reduce((a,s)=>a+(s.minutes||0),0);
+  el('sessionCount').textContent = S.sessions.length;
+  const ul = el('sessionList'); ul.innerHTML='';
+  S.sessions.slice(-10).reverse().forEach(s=>{
+    const li=document.createElement('li'); li.className='item';
+    li.innerHTML = `<div>
+      <div>${s.task||'Focus session'}</div>
+      <div class="small">${s.date} • ${s.minutes} min • ${s.outcome||'—'}</div>
+    </div>`;
+    ul.appendChild(li);
+  });
+}
+
+/* ---------- Streak ---------- */
+function streakCount(){
+  // Count consecutive days with any minutes
+  const set = new Set(S.sessions.map(s=>s.date));
+  let d = new Date(); let count = 0;
+  for(;;){
+    const key = d.toISOString().slice(0,10);
+    if(set.has(key)){ count++; d.setDate(d.getDate()-1); } else break;
+  }
+  return count;
+}
+
+/* ---------- Timer ---------- */
+function startTimer(){
+  const target = S.timer.phase==='idle' ? 'focus' : S.timer.phase;
+  if(target==='idle') S.timer.phase='focus';
+  if(S.timer.phase==='focus' && !S.timer.remaining) S.timer.remaining=S.settings.focus*60;
+  if(S.timer.phase==='break' && !S.timer.remaining) S.timer.remaining=S.settings.break*60;
+  S.timer.handle = setInterval(tick, 1000);
+  S.timer.startedAt = Date.now();
+  el('startBtn').textContent='Resume';
+  el('pauseBtn').disabled=false;
+}
+function pauseTimer(){
+  clearInterval(S.timer.handle); S.timer.handle=null;
+}
+function resetTimer(){
+  pauseTimer();
+  S.timer.phase='idle';
+  S.timer.remaining=S.settings.focus*60;
+  renderFocus();
+}
+function tick(){
+  if(S.timer.remaining>0){ S.timer.remaining--; renderFocus(); return; }
+  pauseTimer();
+  ding();
+  if(S.timer.phase==='focus'){
+    S.timer.phase='break'; S.timer.remaining=S.settings.break*60; renderFocus(); startTimer();
+  }else{
+    S.timer.phase='idle'; renderFocus();
+  }
+}
+function completeTask(){
+  const id = S.timer.currentTaskId;
+  const t = S.tasks.find(x=>x.id===id);
+  const minutes = S.settings.focus;
+  S.sessions.push({ id:uid(), date:todayKey(), minutes, task:t?t.text:null, outcome:'Completed' });
+  if(t){ t.done=true; }
+  save(); renderPlan(); renderProgress(); renderHeader();
+}
+
+/* ---------- Sound ---------- */
+function ding(){
+  if(S.settings.sound){
+    const a = el('ding'); a.currentTime=0; a.play().catch(()=>{});
+  }
+}
+
+/* ---------- Events ---------- */
+function bind(){
+  // Nav
+  $$('nav button').forEach(b=>b.onclick=()=>{ S.view=b.dataset.view; renderNav(); });
+
+  // Plan
+  el('addTask').onclick=()=>{
+const text = el('newTaskText').value.trim();
+if(!text) return;
+const minutes = parseInt(el('newTaskDur').value||'25',10);
+S.tasks.unshift({ id:uid(), text, minutes, today:false, done:false });
+    el('newTaskText').value=''; save(); renderPlan(); renderFocusTaskSelect();
+};
+  el('limitToThree').onclick=()=>{
+    // send top 3 not-done to Today
+    let count = S.tasks.filter(t=>t.today && !t.done).length;
+    for(const t of S.tasks){
+      if(count>=3) break;
+      if(!t.today && !t.done){ t.today=true; count++; }
+    }
+    save(); renderPlan(); renderFocusTaskSelect();
+  };
+  el('clearDone').onclick=()=>{
+    S.tasks = S.tasks.filter(t=>!t.done); save(); renderPlan(); renderFocusTaskSelect();
+  };
+
+  // Focus
+  el('startBtn').onclick=()=>{ if(S.timer.phase==='idle'){ S.timer.phase='focus'; S.timer.remaining=S.settings.focus*60; } startTimer(); renderFocus(); };
+  el('pauseBtn').onclick=()=>{ pauseTimer(); renderFocus(); };
+  el('resetBtn').onclick=()=>{ resetTimer(); };
+  el('extendBtn').onclick=()=>{ if(S.timer.phase==='focus'){ S.timer.remaining+=5*60; renderFocus(); } };
+  el('completeBtn').onclick=()=>{ completeTask(); renderPlan(); renderProgress(); renderHeader(); };
+
+  el('currentTask').onchange=e=>{
+    S.timer.currentTaskId = e.target.value || null;
+    el('completeBtn').disabled = !S.timer.currentTaskId || S.timer.phase!=='idle';
+  };
+  el('pickTop').onclick=()=>{
+    const top = S.tasks.find(t=>t.today && !t.done) || S.tasks.find(t=>!t.done);
+    if(top){ S.timer.currentTaskId=top.id; renderFocusTaskSelect(); el('completeBtn').disabled=false; }
+  };
+
+  // Distraction dump
+  el('dumpAdd').onclick=()=>{
+    const v = el('dumpInput').value.trim(); if(!v) return;
+    const li=document.createElement('li'); li.className='item'; li.innerHTML=`<div>${v}</div><button class="btn ghost del">Remove</button>`;
+    li.querySelector('.del').onclick=()=>li.remove();
+    el('dumpList').prepend(li); el('dumpInput').value='';
+  };
+
+  // Settings
+  el('saveSettings').onclick=()=>{
+    S.settings.focus = Math.max(5, Math.min(120, parseInt(el('durFocus').value||'25',10)));
+    S.settings.break = Math.max(3, Math.min(30, parseInt(el('durBreak').value||'5',10)));
+    S.settings.sound = (el('soundToggle').value==='on');
+    S.settings.fontSize = Math.max(14, Math.min(22, parseInt(el('fontSize').value||'16',10)));
+    document.documentElement.style.setProperty('--font-size', S.settings.fontSize+'px');
+    save(); renderFocus();
+  };
+  el('resetAll').onclick=()=>{
+    if(confirm('Erase all local data?')){ localStorage.removeItem(STORE); location.reload(); }
+  };
+
+  // Keyboard
+  document.addEventListener('keydown', (e)=>{
+    if(e.target && ['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
+    if(e.code==='Space'){ e.preventDefault(); if(S.timer.handle) pauseTimer(); else { if(S.timer.phase==='idle'){ S.timer.phase='focus'; S.timer.remaining=S.settings.focus*60; } startTimer(); } renderFocus(); }
+    if(e.key==='r' || e.key==='R'){ resetTimer(); }
+    if(e.key==='d' || e.key==='D'){ if(!el('completeBtn').disabled) { completeTask(); renderPlan(); renderProgress(); renderHeader(); } }
+  });
+}
+
+/* ---------- Init ---------- */
+function init(){
+  load();
+  // apply settings
+  el('durFocus').value=S.settings.focus;
+  el('durBreak').value=S.settings.break;
+  el('fontSize').value=S.settings.fontSize;
+  el('soundToggle').value=S.settings.sound?'on':'off';
+  document.documentElement.style.setProperty('--font-size', S.settings.fontSize+'px');
+
+  renderHeader(); renderNav(); renderPlan(); renderFocus(); renderProgress();
+  bind();
+}
+init();
+</script>
+</body>
+</html>
